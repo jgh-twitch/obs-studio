@@ -18,6 +18,7 @@
 #include "rtmp-stream.h"
 #include "rtmp-av1.h"
 #include "rtmp-hevc.h"
+#include "librtmp/rtmp_sys.h"
 
 #include <obs-avc.h>
 #include <obs-hevc.h>
@@ -1153,22 +1154,34 @@ static void win32_log_interface_type(struct rtmp_stream *stream)
 }
 #endif
 
-static int build_addr_list(AVal* host, int port, struct addrinfo** result, int* socket_error)
+static void print_addrs(struct addrinfo *addr)
 {
+	blog(LOG_WARNING, "address interfaces\n");
+	while (addr) {
+		blog(LOG_WARNING, "Interface family: %x\n", addr->ai_family);
+		addr = addr->ai_next;
+	}
+}
+
+static int build_addr_list(AVal *host, int port, struct addrinfo **result,
+			   int *socket_error)
+{
+	if (result == NULL) {
+		return OBS_OUTPUT_ERROR;
+	}
+
 	int ret = OBS_OUTPUT_SUCCESS;
 	char *hostname;
 	if (host->av_val[host->av_len] || host->av_val[0] == '[') {
 		int v6 = host->av_val[0] == '[';
-		hostname = malloc(host->av_len+1 - v6 * 2);
+		hostname = malloc(host->av_len + 1 - v6 * 2);
 		memcpy(hostname, host->av_val + v6, host->av_len - v6 * 2);
 		hostname[host->av_len - v6 * 2] = '\0';
-	}
-	else {
+	} else {
 		hostname = host->av_val;
 	}
 	struct addrinfo hints;
-	struct addrinfo *result = NULL;
-	struct addrinfo *ptr = NULL;
+	//struct addrinfo *ptr = NULL;
 
 	memset(&hints, 0, sizeof(hints));
 
@@ -1176,22 +1189,22 @@ static int build_addr_list(AVal* host, int port, struct addrinfo** result, int* 
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
-	service->ss_family = AF_UNSPEC;
-	*addrlen = 0;
+//	service->ss_family = AF_UNSPEC;
+//	*addrlen = 0;
 
 	char portStr[8];
 
 	snprintf(portStr, sizeof(portStr), "%d", port);
 
-	int err = getaddrinfo(hostname, portStr, &hints, &result);
+	int err = getaddrinfo(hostname, portStr, &hints, result);
 
-	if (err)
-	{
+	if (err) {
 #ifndef _WIN32
 #define gai_strerrorA gai_strerror
 #endif
 		int serr = GetSockError();
-		do_log(LOG_ERROR, "Could not resolve %s: %s (%d)", hostname, gai_strerrorA(serr), serr);
+		blog(LOG_ERROR, "Could not resolve %s: %s (%d)", hostname,
+		       gai_strerrorA(serr), serr);
 		if (socket_error != NULL) {
 			*socket_error = serr;
 		}
@@ -1199,8 +1212,36 @@ static int build_addr_list(AVal* host, int port, struct addrinfo** result, int* 
 		goto finish;
 	}
 
+	// Reorder addresses interleaving address family
+	struct addrinfo *cur = result[0]->ai_next;
+	struct addrinfo *prev = result[0];
+	print_addrs(result[0]);
+	while (cur) {
+		if (prev->ai_family == cur->ai_family) {
+			const int target_family = prev->ai_family == AF_INET ? AF_INET6 : AF_INET;
+			struct addrinfo* it = cur->ai_next;
+			struct addrinfo* prev_it = cur;
+			while (it) {
+				if (it->ai_family == target_family) {
+					break;
+				}
+				prev_it = it;
+				it = it->ai_next;
+			}
+			if (!it) {
+				// we're at the end
+				break;
+			}
+			prev->ai_next = it;
+			prev_it->ai_next = it->ai_next;
+			it->ai_next = cur;
+		}
+		prev = cur;
+		cur = cur->ai_next;
+	}
+	print_addrs(result[0]);
 finish:
-	if(hostname != host->av_val) {
+	if (hostname != host->av_val) {
 		free(hostname);
 	}
 	return ret;
@@ -1213,8 +1254,60 @@ static int happy_connect(struct rtmp_stream *stream)
 	// followed by the other family.
 	// We will then begin attempting to connect to them in 200ms intervals
 	// The first one to connect wins!
+#ifdef _WIN32
+	HOSTENT *h;
+#endif
+	struct addrinfo *addresses = NULL;
+	struct sockaddr_storage service;
+	//socklen_t addrlen = 0;
+	//socklen_t addrlen_hint = 0;
+	int socket_error = 0;
+	int result = OBS_OUTPUT_SUCCESS;
 
-	return OBS_OUTPUT_SUCCESS;
+	if (!stream->rtmp.Link.hostname.av_len) {
+		result = OBS_OUTPUT_ERROR;
+		goto finish;
+	}
+
+#ifdef _WIN32
+	//COMODO security software sandbox blocks all DNS by returning "host not found"
+	h = gethostbyname("localhost");
+	if (!h && GetLastError() == WSAHOST_NOT_FOUND) {
+		stream->rtmp->last_error_code = WSAHOST_NOT_FOUND;
+		blog(LOG_ERROR, "happy_connect: Connection test failed. This error is likely caused by Comodo Internet Security running OBS in sandbox mode. Please add OBS to the Comodo automatic sandbox exclusion list, restart OBS and try again (11001).");
+		result = OBS_OUTPUT_ERROR;
+		goto finish;
+	}
+#endif
+
+	memset(&service, 0, sizeof(service));
+
+	// if (stream->rtmp->m_bindIP.addrLen) {
+	// 	addrlen_hint = r->m_bindIP.addrLen;
+	// }
+
+	if (stream->rtmp.Link.socksport)
+	{
+		/* Connect via SOCKS */
+		result = build_addr_list(&stream->rtmp.Link.sockshost, stream->rtmp.Link.socksport, &addresses, &socket_error);
+		if (result != OBS_OUTPUT_SUCCESS) {
+			goto finish;
+		}
+	}
+	else
+	{
+		/* Connect directly */
+		result = build_addr_list(&stream->rtmp.Link.hostname, stream->rtmp.Link.port, &addresses, &socket_error);
+		if (result != OBS_OUTPUT_SUCCESS) {
+			goto finish;
+		}
+	}
+
+finish:
+	if (addresses != NULL) {
+		freeaddrinfo(addresses);
+	}
+	return result;
 }
 
 static int try_connect(struct rtmp_stream *stream)
@@ -1267,7 +1360,7 @@ static int try_connect(struct rtmp_stream *stream)
 #ifdef _WIN32
 	win32_log_interface_type(stream);
 #endif
-
+	happy_connect(stream);
 	if (!RTMP_Connect(&stream->rtmp, NULL)) {
 		set_output_error(stream);
 		return OBS_OUTPUT_CONNECT_FAILED;
