@@ -1153,6 +1153,70 @@ static void win32_log_interface_type(struct rtmp_stream *stream)
 }
 #endif
 
+static int build_addr_list(AVal* host, int port, struct addrinfo** result, int* socket_error)
+{
+	int ret = OBS_OUTPUT_SUCCESS;
+	char *hostname;
+	if (host->av_val[host->av_len] || host->av_val[0] == '[') {
+		int v6 = host->av_val[0] == '[';
+		hostname = malloc(host->av_len+1 - v6 * 2);
+		memcpy(hostname, host->av_val + v6, host->av_len - v6 * 2);
+		hostname[host->av_len - v6 * 2] = '\0';
+	}
+	else {
+		hostname = host->av_val;
+	}
+	struct addrinfo hints;
+	struct addrinfo *result = NULL;
+	struct addrinfo *ptr = NULL;
+
+	memset(&hints, 0, sizeof(hints));
+
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	service->ss_family = AF_UNSPEC;
+	*addrlen = 0;
+
+	char portStr[8];
+
+	snprintf(portStr, sizeof(portStr), "%d", port);
+
+	int err = getaddrinfo(hostname, portStr, &hints, &result);
+
+	if (err)
+	{
+#ifndef _WIN32
+#define gai_strerrorA gai_strerror
+#endif
+		int serr = GetSockError();
+		do_log(LOG_ERROR, "Could not resolve %s: %s (%d)", hostname, gai_strerrorA(serr), serr);
+		if (socket_error != NULL) {
+			*socket_error = serr;
+		}
+		ret = OBS_OUTPUT_ERROR;
+		goto finish;
+	}
+
+finish:
+	if(hostname != host->av_val) {
+		free(hostname);
+	}
+	return ret;
+}
+
+// Currently based on RFC 6555
+static int happy_connect(struct rtmp_stream *stream)
+{
+	// So here's what we're going to do. We're going to gather the host addresses, interleave them into default family [AF_INET or AF_INET6]
+	// followed by the other family.
+	// We will then begin attempting to connect to them in 200ms intervals
+	// The first one to connect wins!
+
+	return OBS_OUTPUT_SUCCESS;
+}
+
 static int try_connect(struct rtmp_stream *stream)
 {
 	if (dstr_is_empty(&stream->path)) {
