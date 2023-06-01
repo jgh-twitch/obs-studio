@@ -1156,9 +1156,19 @@ static void win32_log_interface_type(struct rtmp_stream *stream)
 
 static void print_addrs(struct addrinfo *addr)
 {
-	blog(LOG_WARNING, "address interfaces\n");
+	blog(LOG_INFO, "address interfaces");
 	while (addr) {
-		blog(LOG_WARNING, "Interface family: %x\n", addr->ai_family);
+		char name[INET6_ADDRSTRLEN+1] = {0};
+
+		switch(addr->ai_family) {
+		case AF_INET6:
+			inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)addr->ai_addr)->sin6_addr), name, INET6_ADDRSTRLEN);
+			break;
+		case AF_INET:
+			inet_ntop(AF_INET, &(((struct sockaddr_in *)addr->ai_addr)->sin_addr), name, INET6_ADDRSTRLEN);
+			break;
+		}
+		blog(LOG_INFO, "Interface family: %x flags: %x isTcp: %d sockType: %d name:%s", addr->ai_family, addr->ai_flags, addr->ai_protocol == IPPROTO_TCP, addr->ai_socktype, name);
 		addr = addr->ai_next;
 	}
 }
@@ -1189,13 +1199,10 @@ static int build_addr_list(AVal *host, int port, struct addrinfo **result,
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_protocol = IPPROTO_TCP;
 
-//	service->ss_family = AF_UNSPEC;
-//	*addrlen = 0;
-
 	char portStr[8];
 
 	snprintf(portStr, sizeof(portStr), "%d", port);
-
+	blog(LOG_INFO, "Getting address info for %s:%s", hostname, portStr);
 	int err = getaddrinfo(hostname, portStr, &hints, result);
 
 	if (err) {
@@ -1217,7 +1224,8 @@ static int build_addr_list(AVal *host, int port, struct addrinfo **result,
 	struct addrinfo *prev = result[0];
 	print_addrs(result[0]);
 	while (cur) {
-		if (prev->ai_family == cur->ai_family) {
+		if (prev->ai_family == cur->ai_family && (cur->ai_family == AF_INET || cur->ai_family == AF_INET6)) {
+			// If the current protocol family matches the previous one, look for the next instance of the other kind.
 			const int target_family = prev->ai_family == AF_INET ? AF_INET6 : AF_INET;
 			struct addrinfo* it = cur->ai_next;
 			struct addrinfo* prev_it = cur;
@@ -1229,7 +1237,7 @@ static int build_addr_list(AVal *host, int port, struct addrinfo **result,
 				it = it->ai_next;
 			}
 			if (!it) {
-				// we're at the end
+				// we're at the end and haven't found the other kind, exit the loop early.
 				break;
 			}
 			prev->ai_next = it;
