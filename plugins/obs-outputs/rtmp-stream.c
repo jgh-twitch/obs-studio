@@ -1184,7 +1184,7 @@ static int try_connect(struct rtmp_stream *stream)
 	set_rtmp_dstr(&stream->rtmp.Link.pubPasswd, &stream->password);
 	set_rtmp_dstr(&stream->rtmp.Link.flashVer, &stream->encoder_name);
 	stream->rtmp.Link.swfUrl = stream->rtmp.Link.tcUrl;
-
+    
 	if (dstr_is_empty(&stream->bind_ip) ||
 	    dstr_cmp(&stream->bind_ip, "default") == 0) {
 		memset(&stream->rtmp.m_bindIP, 0,
@@ -1199,6 +1199,10 @@ static int try_connect(struct rtmp_stream *stream)
 			info("Binding to IPv%d", ipv6 ? 6 : 4);
 		}
 	}
+
+    // Only use the IPv4 / IPv6 hint if a binding address isn't specified.
+    if (stream->rtmp.m_bindIP.addrLen == 0)
+        stream->rtmp.m_bindIP.addrLen = stream->addrlen_hint;
 
 	RTMP_AddStream(&stream->rtmp, stream->key.array);
 
@@ -1228,6 +1232,7 @@ static bool init_connect(struct rtmp_stream *stream)
 	obs_service_t *service;
 	obs_data_t *settings;
 	const char *bind_ip;
+	const char *ip_version;
 	int64_t drop_p;
 	int64_t drop_b;
 	uint32_t caps;
@@ -1313,6 +1318,18 @@ static bool init_connect(struct rtmp_stream *stream)
 
 	bind_ip = obs_data_get_string(settings, OPT_BIND_IP);
 	dstr_copy(&stream->bind_ip, bind_ip);
+
+	ip_version = obs_data_get_string(settings, OPT_IP_VERSION);
+	if (ip_version != NULL) {
+		long ver = strtol(ip_version, NULL, 10);
+		socklen_t len = 0;
+		if (ver == 6)
+			len = sizeof(struct sockaddr_in6);
+		else if (ver == 4)
+			len = sizeof(struct sockaddr_in);
+		stream->addrlen_hint = len;
+	}
+
 
 #ifdef _WIN32
 	stream->new_socket_loop =
