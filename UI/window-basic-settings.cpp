@@ -626,6 +626,7 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 	HookWidget(ui->processPriority,      COMBO_CHANGED,  ADV_CHANGED);
 	HookWidget(ui->confirmOnExit,        CHECK_CHANGED,  ADV_CHANGED);
 	HookWidget(ui->bindToIP,             COMBO_CHANGED,  ADV_CHANGED);
+	HookWidget(ui->ipVersion,            COMBO_CHANGED,  ADV_CHANGED);
 	HookWidget(ui->enableNewSocketLoop,  CHECK_CHANGED,  ADV_CHANGED);
 	HookWidget(ui->enableLowLatencyMode, CHECK_CHANGED,  ADV_CHANGED);
 	HookWidget(ui->hotkeyFocusType,      COMBO_CHANGED,  ADV_CHANGED);
@@ -896,7 +897,16 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 
 		ui->bindToIP->addItem(QT_UTF8(name), val);
 	}
-
+	// Add IP Version options
+	ui->ipVersion->addItem(
+		QTStr("Basic.Settings.Advanced.Network.IPVersion.Both"),
+		"IPv4+IPv6");
+	ui->ipVersion->addItem(
+		QTStr("Basic.Settings.Advanced.Network.IPVersion.V4Only"),
+		"IPv4");
+	ui->ipVersion->addItem(
+		QTStr("Basic.Settings.Advanced.Network.IPVersion.V6Only"),
+		"IPv6");
 	obs_properties_destroy(ppts);
 
 	InitStreamPage();
@@ -2897,7 +2907,8 @@ void OBSBasicSettings::LoadAdvancedSettings()
 		App()->GlobalConfig(), "General", "HotkeyFocusType");
 	bool dynBitrate =
 		config_get_bool(main->Config(), "Output", "DynamicBitrate");
-
+	const char *ipVersion =
+		config_get_string(main->Config(), "Output", "IPVersion");
 	bool confirmOnExit =
 		config_get_bool(GetGlobalConfig(), "General", "ConfirmOnExit");
 	ui->confirmOnExit->setChecked(confirmOnExit);
@@ -2936,6 +2947,7 @@ void OBSBasicSettings::LoadAdvancedSettings()
 	ui->sdrWhiteLevel->setValue(sdrWhiteLevel);
 	ui->hdrNominalPeakLevel->setValue(hdrNominalPeakLevel);
 
+	SetComboByValue(ui->ipVersion, ipVersion);
 	if (!SetComboByValue(ui->bindToIP, bindIP))
 		SetInvalidValue(ui->bindToIP, bindIP, bindIP);
 
@@ -3669,6 +3681,7 @@ void OBSBasicSettings::SaveAdvancedSettings()
 	SaveSpinBox(ui->reconnectRetryDelay, "Output", "RetryDelay");
 	SaveSpinBox(ui->reconnectMaxRetries, "Output", "MaxRetries");
 	SaveComboData(ui->bindToIP, "Output", "BindIP");
+	SaveComboData(ui->ipVersion, "Output", "IPVersion");
 	SaveCheckBox(ui->autoRemux, "Video", "AutoRemux");
 	SaveCheckBox(ui->dynBitrate, "Output", "DynamicBitrate");
 
@@ -6233,6 +6246,8 @@ void OBSBasicSettings::UpdateAdvNetworkGroup()
 	ui->bindToIPLabel->setVisible(enabled);
 	ui->bindToIP->setVisible(enabled);
 	ui->dynBitrate->setVisible(enabled);
+	ui->ipVersionLabel->setVisible(enabled);
+	ui->ipVersion->setVisible(enabled);
 #ifdef _WIN32
 	ui->enableNewSocketLoop->setVisible(enabled);
 	ui->enableLowLatencyMode->setVisible(enabled);
