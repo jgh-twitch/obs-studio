@@ -1330,7 +1330,6 @@ static bool init_connect(struct rtmp_stream *stream)
 		stream->addrlen_hint = len;
 	}
 
-
 #ifdef _WIN32
 	stream->new_socket_loop =
 		obs_data_get_bool(settings, OPT_NEWSOCKETLOOP_ENABLED);
