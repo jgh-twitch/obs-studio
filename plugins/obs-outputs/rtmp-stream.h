@@ -82,7 +82,7 @@ struct rtmp_stream {
 	struct dstr username, password;
 	struct dstr encoder_name;
 	struct dstr bind_ip;
-    socklen_t addrlen_hint; /* Used to hint IPv4 vs IPv6 */
+	socklen_t addrlen_hint; /* Used to hint IPv4 vs IPv6 */
 
 	/* frame drop variables */
 	int64_t drop_threshold_usec;
