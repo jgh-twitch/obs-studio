@@ -528,6 +528,9 @@ static void set_output_error(struct rtmp_stream *stream)
 	case WSAEADDRNOTAVAIL:
 		msg = obs_module_text("AddressNotAvailable");
 		break;
+	case WSAEINVAL:
+		msg = obs_module_text("InvalidParameter");
+		break;
 	}
 #else
 	switch (stream->rtmp.last_error_code) {
@@ -551,6 +554,9 @@ static void set_output_error(struct rtmp_stream *stream)
 		break;
 	case EADDRNOTAVAIL:
 		msg = obs_module_text("AddressNotAvailable");
+		break;
+	case EINVAL:
+		msg = obs_module_text("InvalidParameter");
 		break;
 	}
 #endif
