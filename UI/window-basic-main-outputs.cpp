@@ -1194,7 +1194,7 @@ bool SimpleOutput::StartStreaming(obs_service_t *service)
 	const char *bindIP =
 		config_get_string(main->Config(), "Output", "BindIP");
 	const char *ipVersion =
-		config_get_string(main->Config(), "Output", "ipVersion");
+		config_get_string(main->Config(), "Output", "IPVersion");
 #ifdef _WIN32
 	bool enableNewSocketLoop = config_get_bool(main->Config(), "Output",
 						   "NewSocketLoopEnable");
