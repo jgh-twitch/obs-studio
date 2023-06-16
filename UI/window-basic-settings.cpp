@@ -898,9 +898,9 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 		ui->bindToIP->addItem(QT_UTF8(name), val);
 	}
 	// Add IP Version options
-	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.Both"), "0");
-	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.V4Only"), "4");
-	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.V6Only"), "6");
+	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.Both"), "IPv4+IPv6");
+	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.V4Only"), "IPv4");
+	ui->ipVersion->addItem(QTStr("Basic.Settings.Advanced.Network.IPVersion.V6Only"), "IPv6");
 	obs_properties_destroy(ppts);
 
 	InitStreamPage();
@@ -2944,6 +2944,7 @@ void OBSBasicSettings::LoadAdvancedSettings()
 	SetComboByValue(ui->ipVersion, ipVersion);
 	if (!SetComboByValue(ui->bindToIP, bindIP))
 		SetInvalidValue(ui->bindToIP, bindIP, bindIP);
+
 	if (obs_video_active()) {
 		ui->advancedVideoContainer->setEnabled(false);
 	}

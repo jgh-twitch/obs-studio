@@ -1321,11 +1321,10 @@ static bool init_connect(struct rtmp_stream *stream)
 
 	ip_version = obs_data_get_string(settings, OPT_IP_VERSION);
 	if (ip_version != NULL) {
-		long ver = strtol(ip_version, NULL, 10);
 		socklen_t len = 0;
-		if (ver == 6)
+		if (strncmp(ip_version, "IPv6", 4) == 0)
 			len = sizeof(struct sockaddr_in6);
-		else if (ver == 4)
+		else if (strncmp(ip_version, "IPv4", 4) == 0)
 			len = sizeof(struct sockaddr_in);
 		stream->addrlen_hint = len;
 	}
